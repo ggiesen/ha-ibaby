@@ -38,6 +38,11 @@ CATEGORIES: dict[str, str] = {
     "songs": "Songs",
 }
 
+# Hold the control session open this long after a play/next/prev so the camera
+# can fetch and latch the track before we close it. Closing too soon aborts the
+# fetch -- the card flips to "playing" but nothing comes out of the speaker.
+MUSIC_PLAY_SETTLE_S = 4.0
+
 _FEATURES = (
     MediaPlayerEntityFeature.PLAY
     | MediaPlayerEntityFeature.PAUSE
@@ -83,19 +88,24 @@ class IbabyMediaPlayer(IbabyEntity, MediaPlayerEntity):
         self.async_write_ha_state()
 
     async def async_media_next_track(self) -> None:
-        await self.coordinator.async_command(lambda lan: lan.next_music())
+        await self.coordinator.async_command(lambda lan: lan.next_music(), settle=MUSIC_PLAY_SETTLE_S)
         self._attr_state = MediaPlayerState.PLAYING
         self.async_write_ha_state()
 
     async def async_media_previous_track(self) -> None:
-        await self.coordinator.async_command(lambda lan: lan.prev_music())
+        await self.coordinator.async_command(lambda lan: lan.prev_music(), settle=MUSIC_PLAY_SETTLE_S)
         self._attr_state = MediaPlayerState.PLAYING
         self.async_write_ha_state()
 
     async def async_media_play(self) -> None:
-        # No bare resume in the protocol surface; replay the last track.
-        if self._last_track is not None:
-            await self._play_track(self._last_track)
+        # No bare "resume" in the protocol; replay the last track, or start the
+        # first lullaby if nothing's been selected yet so Play isn't a no-op.
+        track = self._last_track
+        if track is None:
+            tracks = await self.coordinator.async_music_list("lullabies")
+            track = tracks[0] if tracks else None
+        if track is not None:
+            await self._play_track(track)
 
     # --- play a track --------------------------------------------------- #
     async def async_play_media(
@@ -111,7 +121,9 @@ class IbabyMediaPlayer(IbabyEntity, MediaPlayerEntity):
         await self._play_track(track)
 
     async def _play_track(self, track: dict) -> None:
-        await self.coordinator.async_command(lambda lan: lan.play_music(track, mode=P.VMODE_SINGLE))
+        await self.coordinator.async_command(
+            lambda lan: lan.play_music(track, mode=P.VMODE_SINGLE), settle=MUSIC_PLAY_SETTLE_S
+        )
         self._last_track = track
         self._attr_state = MediaPlayerState.PLAYING
         self._attr_media_title = track.get("name")

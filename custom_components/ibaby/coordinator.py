@@ -119,17 +119,24 @@ class IbabyCoordinator(DataUpdateCoordinator[IbabyData]):
         return IbabyData(sensors=reading, projector=projector)
 
     # --- control commands ----------------------------------------------- #
-    async def async_command(self, fn: Callable[[LANCamera], None]) -> None:
-        """Run a single control command on a fresh, serialized control session."""
-        async with self._lock:
-            await self.hass.async_add_executor_job(self._command, fn)
+    async def async_command(self, fn: Callable[[LANCamera], None], *, settle: float = 1.0) -> None:
+        """Run a single control command on a fresh, serialized control session.
 
-    def _command(self, fn: Callable[[LANCamera], None]) -> None:
+        ``settle`` is how long to keep the session open after sending before
+        closing. Most commands take effect at once (~1s of retransmit service),
+        but music play/next/prev need longer: the camera fetches the track over
+        HTTP and aborts the fetch if the session is torn down before playback
+        latches, so the card shows "playing" while nothing comes out the speaker.
+        """
+        async with self._lock:
+            await self.hass.async_add_executor_job(self._command, fn, settle)
+
+    def _command(self, fn: Callable[[LANCamera], None], settle: float = 1.0) -> None:
         lan = LANCamera(self.camera)
         try:
             lan.connect()
             fn(lan)
-            lan.pump(1.0)  # service retransmit so the reliable command is delivered
+            lan.pump(settle)  # service retransmit + keep the session alive long enough to take effect
         finally:
             lan.close()
 
