@@ -79,3 +79,37 @@ async def test_no_pppp_cameras_aborts(hass: HomeAssistant) -> None:
         )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "no_cameras"
+
+
+async def test_add_second_camera(hass: HomeAssistant) -> None:
+    """Each camera becomes its own entry; the pick step hides already-added ones."""
+    cam1 = _camera("712Qacwg")
+    cam2 = Camera(
+        camid="909Racga",
+        camname="Playroom",
+        camtype="M7T",
+        p2p_uid="FCARE-138313-TNNJZ",
+        p2p_provider="1",
+        p2p_password="dev2",
+    )
+
+    async def add(camid: str) -> None:
+        with patch("custom_components.ibaby.config_flow.IBabyCloud") as cloud:
+            cloud.return_value.login.return_value = [cam1, cam2]
+            r = await hass.config_entries.flow.async_init(
+                DOMAIN, context={"source": config_entries.SOURCE_USER}
+            )
+            r = await hass.config_entries.flow.async_configure(
+                r["flow_id"], {CONF_EMAIL: "a@b.c", CONF_PASSWORD: "pw"}
+            )
+            # the pick step must only offer not-yet-configured cameras
+            schema_keys = r["data_schema"].schema[CONF_CAMID].container
+            assert camid in schema_keys
+            r = await hass.config_entries.flow.async_configure(r["flow_id"], {CONF_CAMID: camid})
+            assert r["type"] is FlowResultType.CREATE_ENTRY
+
+    await add("712Qacwg")
+    await add("909Racga")
+
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert {e.unique_id for e in entries} == {"712Qacwg", "909Racga"}
