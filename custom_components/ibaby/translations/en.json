@@ -39,6 +39,9 @@
       "ptz_down": { "name": "Move down" },
       "ptz_left": { "name": "Move left" },
       "ptz_right": { "name": "Move right" }
+    },
+    "media_player": {
+      "music": { "name": "Music" }
     }
   }
 }
