@@ -1,7 +1,7 @@
 {
   "domain": "ibaby",
   "name": "iBaby Monitor",
-  "after_dependencies": ["go2rtc"],
+  "after_dependencies": ["ffmpeg", "go2rtc"],
   "codeowners": ["@ggiesen"],
   "config_flow": true,
   "dependencies": [],
