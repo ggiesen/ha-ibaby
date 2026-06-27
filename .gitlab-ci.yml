@@ -1,0 +1,54 @@
+# GitLab CI pipeline for the iBaby Monitor HA integration.
+#
+# GitLab is the canonical home of this repo; GitHub is a pull-based mirror whose
+# only job is making the integration installable through HACS. The HACS/hassfest
+# GitHub Actions live in .github/workflows/ and run on the mirror (they validate
+# the HACS/HA-side metadata, not the code). This pipeline is the actual CI:
+# lint + tests on every push.
+#
+# The live protocol lives in the separate pybaby library, pulled in via pip from
+# manifest.json/pyproject.toml's git requirement.
+
+stages:
+  - lint
+  - test
+
+default:
+  image: python:3.12-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git
+    - pip install --upgrade pip
+  cache:
+    key:
+      files:
+        - pyproject.toml
+    paths:
+      - .pip-cache/
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+# ----- lint -----
+
+lint:ruff:
+  stage: lint
+  script:
+    - pip install -e ".[dev]"
+    - ruff check .
+    - ruff format --check .
+
+# ----- tests -----
+#
+# Everything in the integration imports Home Assistant (the wire protocol lives
+# in the separate pyibaby library), so there is a single test job running the
+# full pytest-homeassistant-custom-component stack against an in-process HA.
+
+test:ha:
+  stage: test
+  needs: ["lint:ruff"]
+  script:
+    - pip install -e ".[test-ha]"
+    - pytest -v tests/

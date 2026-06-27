@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Sign in with your iBaby account. Your cameras must be on the same network as Home Assistant.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "pick": {
+        "description": "Choose a camera to add.",
+        "data": {
+          "camid": "Camera"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Could not reach the iBaby cloud."
+    },
+    "abort": {
+      "no_cameras": "No compatible cameras were found on this account.",
+      "already_configured": "All cameras on this account have already been added."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "voc": { "name": "VOC" },
+      "wifi": { "name": "Wi-Fi signal" }
+    }
+  }
+}
