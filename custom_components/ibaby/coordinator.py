@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 from asyncio import Lock
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -29,6 +30,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from pyibaby import Camera, IBabyCloud, LANCamera
+from pyibaby.protocol import ProjectorState
 from pyibaby.sensors import SensorReading
 
 from .bridge import CameraBridge
@@ -38,6 +40,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL_S,
     DOMAIN,
     MANUFACTURER,
+    PROJECTOR_READ_TIMEOUT_S,
     SENSOR_READ_TIMEOUT_S,
 )
 
@@ -46,7 +49,15 @@ _LOGGER = logging.getLogger(__name__)
 type IbabyConfigEntry = ConfigEntry[IbabyCoordinator]
 
 
-class IbabyCoordinator(DataUpdateCoordinator[SensorReading]):
+@dataclass
+class IbabyData:
+    """One poll's worth of camera state."""
+
+    sensors: SensorReading
+    projector: ProjectorState | None = None
+
+
+class IbabyCoordinator(DataUpdateCoordinator[IbabyData]):
     """Polls one camera's environment sensors and dispatches its control commands."""
 
     config_entry: IbabyConfigEntry
@@ -78,8 +89,8 @@ class IbabyCoordinator(DataUpdateCoordinator[SensorReading]):
             model=self.camera.camtype or None,
         )
 
-    # --- sensor polling ------------------------------------------------- #
-    async def _async_update_data(self) -> SensorReading:
+    # --- polling -------------------------------------------------------- #
+    async def _async_update_data(self) -> IbabyData:
         async with self._lock:
             try:
                 return await self.hass.async_add_executor_job(self._poll)
@@ -88,16 +99,24 @@ class IbabyCoordinator(DataUpdateCoordinator[SensorReading]):
             except Exception as err:  # noqa: BLE001 - any pyibaby/socket error -> unavailable
                 raise UpdateFailed(f"error polling {self.camera.camid}: {err}") from err
 
-    def _poll(self) -> SensorReading:
+    def _poll(self) -> IbabyData:
         lan = LANCamera(self.camera)
         try:
             lan.connect()
             reading = lan.read_sensors(timeout=SENSOR_READ_TIMEOUT_S)
+            # Projector/privacy state is best-effort on the same session; a failure
+            # there leaves the switches "unknown" rather than failing the whole poll.
+            projector = None
+            if reading is not None:
+                try:
+                    projector = lan.get_projector(timeout=PROJECTOR_READ_TIMEOUT_S)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug("projector state read failed for %s: %s", self.camera.camid, err)
         finally:
             lan.close()
         if reading is None:
             raise UpdateFailed("no sensor record received")
-        return reading
+        return IbabyData(sensors=reading, projector=projector)
 
     # --- control commands ----------------------------------------------- #
     async def async_command(self, fn: Callable[[LANCamera], None]) -> None:

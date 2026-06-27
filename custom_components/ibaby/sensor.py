@@ -97,6 +97,7 @@ class IbabySensor(IbabyEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | int | None:
-        if self.coordinator.data is None:
+        data = self.coordinator.data
+        if data is None or data.sensors is None:
             return None
-        return self.entity_description.value_fn(self.coordinator.data)
+        return self.entity_description.value_fn(data.sensors)

@@ -39,6 +39,10 @@ DEFAULT_SCAN_INTERVAL_S = 30
 # after connecting before giving up for the cycle.
 SENSOR_READ_TIMEOUT_S = 8.0
 
+# Each poll also queries the projector/privacy state (GET_PROJECTORLAMP) on the
+# same session; this is best-effort and capped shorter than the sensor read.
+PROJECTOR_READ_TIMEOUT_S = 4.0
+
 # Base TCP port for the per-camera pyibaby.rtspd subprocess. Each camera gets a
 # distinct port allocated from here upward; the integration binds 127.0.0.1 only
 # so the RTSP server is never exposed off-host (go2rtc pulls it locally).

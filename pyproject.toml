@@ -39,7 +39,7 @@ classifiers = [
 ]
 # Keep this in sync with custom_components/ibaby/manifest.json's requirements.
 dependencies = [
-    "pyibaby==0.1.0",
+    "pyibaby==0.1.1",
 ]
 
 [project.optional-dependencies]

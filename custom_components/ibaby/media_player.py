@@ -43,6 +43,7 @@ _FEATURES = (
     | MediaPlayerEntityFeature.PAUSE
     | MediaPlayerEntityFeature.STOP
     | MediaPlayerEntityFeature.NEXT_TRACK
+    | MediaPlayerEntityFeature.PREVIOUS_TRACK
     | MediaPlayerEntityFeature.BROWSE_MEDIA
     | MediaPlayerEntityFeature.PLAY_MEDIA
 )
@@ -83,6 +84,11 @@ class IbabyMediaPlayer(IbabyEntity, MediaPlayerEntity):
 
     async def async_media_next_track(self) -> None:
         await self.coordinator.async_command(lambda lan: lan.next_music())
+        self._attr_state = MediaPlayerState.PLAYING
+        self.async_write_ha_state()
+
+    async def async_media_previous_track(self) -> None:
+        await self.coordinator.async_command(lambda lan: lan.prev_music())
         self._attr_state = MediaPlayerState.PLAYING
         self.async_write_ha_state()
 
