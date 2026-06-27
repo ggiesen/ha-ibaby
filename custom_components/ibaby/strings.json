@@ -33,6 +33,12 @@
       "moonlight": { "name": "Moonlight" },
       "music_light": { "name": "Music light" },
       "privacy": { "name": "Privacy mode" }
+    },
+    "button": {
+      "ptz_up": { "name": "Move up" },
+      "ptz_down": { "name": "Move down" },
+      "ptz_left": { "name": "Move left" },
+      "ptz_right": { "name": "Move right" }
     }
   }
 }
