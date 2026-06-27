@@ -26,6 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # Platforms are added here as they are implemented.
 PLATFORMS: list[Platform] = [
+    Platform.CAMERA,
     Platform.SENSOR,
 ]
 
