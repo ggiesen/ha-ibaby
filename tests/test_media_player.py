@@ -35,7 +35,7 @@ async def test_features_and_transport(hass: HomeAssistant) -> None:
 
 async def test_browse_and_play(hass: HomeAssistant) -> None:
     async with setup_with_mock(hass) as lan:
-        coord = hass.config_entries.async_entries("ibaby")[0].runtime_data
+        coord = hass.config_entries.async_entries("ibaby")[0].runtime_data[0]
         tracks = [
             {
                 "id": 2929,

@@ -81,9 +81,12 @@ async def async_setup_entry(
     entry: IbabyConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the environment sensors for a camera."""
-    coordinator = entry.runtime_data
-    async_add_entities(IbabySensor(coordinator, description) for description in SENSORS)
+    """Set up the environment sensors for every camera."""
+    async_add_entities(
+        IbabySensor(coordinator, description)
+        for coordinator in entry.runtime_data
+        for description in SENSORS
+    )
 
 
 class IbabySensor(IbabyEntity, SensorEntity):

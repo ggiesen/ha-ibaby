@@ -10,11 +10,14 @@ DOMAIN = "ibaby"
 
 MANUFACTURER = "iBaby"
 
-# Config entry data. The iBaby cloud is used ONLY at setup to authenticate and
-# enumerate the account's cameras (and to fetch the built-in music list); all
-# live media, sensors, and control run locally over the P2P (PPPP) session.
+# Config entry data. One entry per iBaby ACCOUNT; every PPPP camera on the
+# account is a device under it (CONF_CAMERAS is the list of their identities).
+# The cloud is used ONLY at setup to authenticate and enumerate cameras (and for
+# the built-in music list); all live media, sensors, and control run locally
+# over the P2P (PPPP) session.
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
+CONF_CAMERAS = "cameras"
 
 # Per-camera identity captured at config time so the integration can rebuild a
 # pyibaby Camera without another cloud round-trip on every restart.

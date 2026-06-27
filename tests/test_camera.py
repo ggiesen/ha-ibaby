@@ -13,7 +13,7 @@ from .test_sensor import ENTRY_DATA
 
 
 async def test_camera_entity_and_stream_source(hass: HomeAssistant) -> None:
-    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id="712Qacwg")
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA, unique_id="a@b.c")
     entry.add_to_hass(hass)
     lan = MagicMock()
     lan.read_sensors.return_value = SensorReading(temperature_c=26.0, humidity_pct=50.0)

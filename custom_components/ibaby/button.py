@@ -52,9 +52,12 @@ async def async_setup_entry(
     entry: IbabyConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the PTZ buttons."""
-    coordinator = entry.runtime_data
-    async_add_entities(IbabyButton(coordinator, description) for description in BUTTONS)
+    """Set up the PTZ buttons for every camera."""
+    async_add_entities(
+        IbabyButton(coordinator, description)
+        for coordinator in entry.runtime_data
+        for description in BUTTONS
+    )
 
 
 class IbabyButton(IbabyEntity, ButtonEntity):

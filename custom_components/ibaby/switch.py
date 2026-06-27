@@ -64,9 +64,12 @@ async def async_setup_entry(
     entry: IbabyConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the projector / privacy switches."""
-    coordinator = entry.runtime_data
-    async_add_entities(IbabySwitch(coordinator, description) for description in SWITCHES)
+    """Set up the projector / privacy switches for every camera."""
+    async_add_entities(
+        IbabySwitch(coordinator, description)
+        for coordinator in entry.runtime_data
+        for description in SWITCHES
+    )
 
 
 class IbabySwitch(IbabyEntity, SwitchEntity):

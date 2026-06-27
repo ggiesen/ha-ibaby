@@ -46,7 +46,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-type IbabyConfigEntry = ConfigEntry[IbabyCoordinator]
+type IbabyConfigEntry = ConfigEntry[list[IbabyCoordinator]]
 
 
 @dataclass

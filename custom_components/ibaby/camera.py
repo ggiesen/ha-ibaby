@@ -25,8 +25,8 @@ async def async_setup_entry(
     entry: IbabyConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the camera entity."""
-    async_add_entities([IbabyCamera(entry.runtime_data)])
+    """Set up a camera entity per camera."""
+    async_add_entities(IbabyCamera(coordinator) for coordinator in entry.runtime_data)
 
 
 class IbabyCamera(CoordinatorEntity[IbabyCoordinator], Camera):

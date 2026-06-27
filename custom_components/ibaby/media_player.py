@@ -54,8 +54,8 @@ async def async_setup_entry(
     entry: IbabyConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the music player."""
-    async_add_entities([IbabyMediaPlayer(entry.runtime_data)])
+    """Set up a music player per camera."""
+    async_add_entities(IbabyMediaPlayer(coordinator) for coordinator in entry.runtime_data)
 
 
 class IbabyMediaPlayer(IbabyEntity, MediaPlayerEntity):
