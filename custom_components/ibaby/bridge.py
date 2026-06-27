@@ -20,6 +20,8 @@ import logging
 import os
 import socket
 import sys
+from collections import deque
+from typing import ClassVar
 
 from homeassistant.core import HomeAssistant
 
@@ -40,6 +42,11 @@ def _free_port() -> int:
 class CameraBridge:
     """Owns the per-camera ``pyibaby.rtspd`` subprocess and its stream URL."""
 
+    # Serializes port allocation + bind across every camera's bridge (see _start): the
+    # _free_port() probe closes its socket before rtspd binds, so two bridges starting
+    # at once could grab the same port and one rtspd would fail to bind.
+    _start_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
+
     def __init__(self, hass: HomeAssistant, *, camid: str, p2p_uid: str, p2p_password: str) -> None:
         self.hass = hass
         self._camid = camid
@@ -48,6 +55,8 @@ class CameraBridge:
         self._proc: asyncio.subprocess.Process | None = None
         self._port: int | None = None
         self._lock = asyncio.Lock()
+        self._stderr_task: asyncio.Task | None = None
+        self._stderr_tail: deque[str] = deque(maxlen=25)
 
     async def async_stream_source(self) -> str | None:
         """Return the local RTSP URL, (re)starting the subprocess if needed."""
@@ -59,38 +68,66 @@ class CameraBridge:
             return f"rtsp://{RTSP_BIND_HOST}:{self._port}/cam"
 
     async def _start(self) -> bool:
-        port = _free_port()
         env = {
             **os.environ,
             "IBABY_UID": self._p2p_uid,
             "IBABY_CAMID": self._camid,
             "IBABY_DEV_PASSWORD": self._p2p_password,
         }
-        _LOGGER.debug("starting pyibaby.rtspd for %s on 127.0.0.1:%s", self._camid, port)
-        try:
-            self._proc = await asyncio.create_subprocess_exec(
-                sys.executable,
-                "-m",
-                "pyibaby.rtspd",
-                "--host",
-                RTSP_BIND_HOST,
-                "--port",
-                str(port),
-                "--path",
-                "/cam",
-                env=env,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
+        # Hold the class lock from picking the port through confirming rtspd is bound,
+        # so a second camera's bridge can't allocate the same port mid-start.
+        async with CameraBridge._start_lock:
+            port = _free_port()
+            _LOGGER.debug(
+                "starting pyibaby.rtspd for %s on %s:%s", self._camid, RTSP_BIND_HOST, port
             )
-        except OSError as err:
-            _LOGGER.error("failed to launch pyibaby.rtspd for %s: %s", self._camid, err)
-            return False
-        self._port = port
-        if not await self._wait_listening(port):
-            _LOGGER.error("pyibaby.rtspd for %s did not start serving in time", self._camid)
-            await self.async_stop()
-            return False
+            try:
+                self._proc = await asyncio.create_subprocess_exec(
+                    sys.executable,
+                    "-m",
+                    "pyibaby.rtspd",
+                    "--host",
+                    RTSP_BIND_HOST,
+                    "--port",
+                    str(port),
+                    "--path",
+                    "/cam",
+                    env=env,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+            except OSError as err:
+                _LOGGER.error("failed to launch pyibaby.rtspd for %s: %s", self._camid, err)
+                return False
+            self._port = port
+            self._stderr_task = self.hass.async_create_background_task(
+                self._pump_stderr(self._proc), name=f"ibaby-rtspd-stderr-{self._camid}"
+            )
+            if not await self._wait_listening(port):
+                tail = " | ".join(self._stderr_tail) or "(no output)"
+                _LOGGER.error(
+                    "pyibaby.rtspd for %s did not start serving in time; rtspd output: %s",
+                    self._camid,
+                    tail,
+                )
+                await self.async_stop()
+                return False
         return True
+
+    async def _pump_stderr(self, proc: asyncio.subprocess.Process) -> None:
+        """Log rtspd's stderr so subprocess failures are visible in the HA log.
+
+        Kept at debug for the chatty per-frame lines; the last lines are also surfaced
+        in the error logged when the server fails to come up.
+        """
+        if proc.stderr is None:
+            return
+        with contextlib.suppress(Exception):
+            async for raw in proc.stderr:
+                line = raw.decode(errors="replace").rstrip()
+                if line:
+                    self._stderr_tail.append(line)
+                    _LOGGER.debug("rtspd[%s]: %s", self._camid, line)
 
     async def _wait_listening(self, port: int) -> bool:
         """Wait until the RTSP server accepts connections (or the process dies)."""
@@ -113,6 +150,9 @@ class CameraBridge:
         proc = self._proc
         self._proc = None
         self._port = None
+        if self._stderr_task is not None:
+            self._stderr_task.cancel()
+            self._stderr_task = None
         if proc is None or proc.returncode is not None:
             return
         with contextlib.suppress(ProcessLookupError):
