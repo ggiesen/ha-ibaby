@@ -10,5 +10,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://gitlab.com/ggiesen/ha-ibaby/-/issues",
   "requirements": ["pyibaby==0.1.1"],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }
