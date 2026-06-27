@@ -28,6 +28,11 @@
     "sensor": {
       "voc": { "name": "VOC" },
       "wifi": { "name": "Wi-Fi signal" }
+    },
+    "switch": {
+      "moonlight": { "name": "Moonlight" },
+      "music_light": { "name": "Music light" },
+      "privacy": { "name": "Privacy mode" }
     }
   }
 }
