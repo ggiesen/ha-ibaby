@@ -22,7 +22,7 @@ audio, sensors, and control run on your LAN with no cloud in the path.
   camera roughly every 5 seconds.
 - **Pan / tilt** - up / down / left / right as button entities.
 - **Music** - play the built-in lullabies / songs / nature / stories / white
-  noise as a `media_player`, with media browsing.
+  noise as a `media_player`, with media browsing and volume control.
 - **Lights / privacy** - moonlight, music-light, and privacy mode as switches.
 
 ## Requirements

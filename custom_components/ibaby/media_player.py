@@ -23,7 +23,7 @@ from homeassistant.components.media_player import (
     MediaPlayerState,
     MediaType,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from pyibaby import protocol as P
@@ -55,6 +55,8 @@ _FEATURES = (
     | MediaPlayerEntityFeature.PREVIOUS_TRACK
     | MediaPlayerEntityFeature.BROWSE_MEDIA
     | MediaPlayerEntityFeature.PLAY_MEDIA
+    | MediaPlayerEntityFeature.VOLUME_SET
+    | MediaPlayerEntityFeature.VOLUME_STEP
 )
 
 
@@ -80,6 +82,31 @@ class IbabyMediaPlayer(IbabyEntity, MediaPlayerEntity):
         self._last_track: dict | None = None
         self._pending_track: dict | None = None  # single-slot queue: only the latest pick waits
         self._drain_task: asyncio.Task | None = None
+        # Volume is the one media-player attribute the camera reports reliably; seed
+        # it from the latest poll and keep it in sync via _handle_coordinator_update.
+        self._attr_volume_level = self._poll_volume_level()
+
+    def _poll_volume_level(self) -> float | None:
+        """Latest camera volume from the coordinator poll, as a 0.0-1.0 level."""
+        data = self.coordinator.data
+        if data is not None and data.volume is not None:
+            return max(0, min(100, data.volume)) / 100
+        return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        # Refresh the volume slider from the camera each poll (catches changes made
+        # from the official app); play state stays optimistic and is left untouched.
+        level = self._poll_volume_level()
+        if level is not None:
+            self._attr_volume_level = level
+        super()._handle_coordinator_update()
+
+    async def async_set_volume_level(self, volume: float) -> None:
+        vol = round(max(0.0, min(1.0, volume)) * 100)
+        await self.coordinator.async_command(lambda lan: lan.set_music_volume(vol))
+        self._attr_volume_level = vol / 100
+        self.async_write_ha_state()
 
     def _clear_pending(self) -> None:
         """Drop any queued play so an explicit transport action isn't undone by it.

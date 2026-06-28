@@ -40,6 +40,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL_S,
     DOMAIN,
     MANUFACTURER,
+    MUSIC_VOLUME_READ_TIMEOUT_S,
     PROJECTOR_READ_TIMEOUT_S,
     SENSOR_READ_TIMEOUT_S,
 )
@@ -59,6 +60,7 @@ class IbabyData:
 
     sensors: SensorReading
     projector: ProjectorState | None = None
+    volume: int | None = None
 
 
 class IbabyCoordinator(DataUpdateCoordinator[IbabyData]):
@@ -109,19 +111,25 @@ class IbabyCoordinator(DataUpdateCoordinator[IbabyData]):
         try:
             lan.connect()
             reading = lan.read_sensors(timeout=SENSOR_READ_TIMEOUT_S)
-            # Projector/privacy state is best-effort on the same session; a failure
-            # there leaves the switches "unknown" rather than failing the whole poll.
+            # Projector/privacy state and music volume are best-effort on the same
+            # session; a failure there leaves those attributes "unknown" rather than
+            # failing the whole poll.
             projector = None
+            volume = None
             if reading is not None:
                 try:
                     projector = lan.get_projector(timeout=PROJECTOR_READ_TIMEOUT_S)
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.debug("projector state read failed for %s: %s", self.camera.camid, err)
+                try:
+                    volume = lan.get_music_volume(timeout=MUSIC_VOLUME_READ_TIMEOUT_S)
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug("music volume read failed for %s: %s", self.camera.camid, err)
         finally:
             lan.close()
         if reading is None:
             raise UpdateFailed("no sensor record received")
-        return IbabyData(sensors=reading, projector=projector)
+        return IbabyData(sensors=reading, projector=projector, volume=volume)
 
     # --- control commands ----------------------------------------------- #
     async def async_command(self, fn: Callable[[LANCamera], None], *, settle: float = 1.0) -> None:

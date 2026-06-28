@@ -46,6 +46,11 @@ SENSOR_READ_TIMEOUT_S = 8.0
 # same session; this is best-effort and capped shorter than the sensor read.
 PROJECTOR_READ_TIMEOUT_S = 4.0
 
+# Each poll also reads the music/speaker volume (GET_PLAYSOUND) on the same
+# session so the media player's volume slider reflects the camera (including
+# changes made from the official app); best-effort, same short cap.
+MUSIC_VOLUME_READ_TIMEOUT_S = 4.0
+
 # Base TCP port for the per-camera pyibaby.rtspd subprocess. Each camera gets a
 # distinct port allocated from here upward; the integration binds 127.0.0.1 only
 # so the RTSP server is never exposed off-host (go2rtc pulls it locally).

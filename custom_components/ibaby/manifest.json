@@ -9,6 +9,6 @@
   "integration_type": "hub",
   "iot_class": "local_push",
   "issue_tracker": "https://gitlab.com/ggiesen/ha-ibaby/-/issues",
-  "requirements": ["pyibaby==0.1.6"],
-  "version": "0.2.7"
+  "requirements": ["pyibaby==0.1.7"],
+  "version": "0.2.8"
 }
