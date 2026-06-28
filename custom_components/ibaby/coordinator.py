@@ -46,6 +46,10 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# The built-in music catalogue is static; cache it so rapid song switches don't
+# each pay a fresh cloud login.
+MUSIC_LIST_TTL_S = 600
+
 type IbabyConfigEntry = ConfigEntry[list[IbabyCoordinator]]
 
 
@@ -72,6 +76,7 @@ class IbabyCoordinator(DataUpdateCoordinator[IbabyData]):
         )
         self.camera = camera
         self._lock = Lock()
+        self._music_cache: dict[str, tuple[float, list[dict]]] = {}
         self.bridge = CameraBridge(
             hass,
             camid=camera.camid,
@@ -145,7 +150,13 @@ class IbabyCoordinator(DataUpdateCoordinator[IbabyData]):
         return await self.bridge.async_stream_source()
 
     async def async_music_list(self, category: str) -> list[dict]:
-        return await self.hass.async_add_executor_job(self._music_list, category)
+        cached = self._music_cache.get(category)
+        if cached is not None and (self.hass.loop.time() - cached[0]) < MUSIC_LIST_TTL_S:
+            return cached[1]
+        tracks = await self.hass.async_add_executor_job(self._music_list, category)
+        if tracks:  # don't negatively-cache an empty/failed catalogue fetch for the full TTL
+            self._music_cache[category] = (self.hass.loop.time(), tracks)
+        return tracks
 
     def _music_list(self, category: str) -> list[dict]:
         cloud = IBabyCloud()

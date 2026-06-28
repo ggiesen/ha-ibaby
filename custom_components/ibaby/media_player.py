@@ -11,6 +11,8 @@ The camera reports no reliable playback status, so state is optimistic.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Any
 
 from homeassistant.components.media_player import (
@@ -28,6 +30,8 @@ from pyibaby import protocol as P
 
 from .coordinator import IbabyConfigEntry, IbabyCoordinator
 from .entity import IbabyEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 # Category key (pyibaby cloud.MUSIC_CATEGORIES) -> display label.
 CATEGORIES: dict[str, str] = {
@@ -74,27 +78,47 @@ class IbabyMediaPlayer(IbabyEntity, MediaPlayerEntity):
         super().__init__(coordinator, "music")
         self._attr_state = MediaPlayerState.IDLE
         self._last_track: dict | None = None
+        self._pending_track: dict | None = None  # single-slot queue: only the latest pick waits
+        self._drain_task: asyncio.Task | None = None
+
+    def _clear_pending(self) -> None:
+        """Drop any queued play so an explicit transport action isn't undone by it.
+
+        An in-flight play (already past the queue, holding the command lock) still
+        finishes, but with the pending slot empty the drain loop then exits, so the
+        transport command that follows it on the lock wins.
+        """
+        self._pending_track = None
 
     # --- transport ------------------------------------------------------ #
     async def async_media_pause(self) -> None:
+        self._clear_pending()
         await self.coordinator.async_command(lambda lan: lan.pause_music())
         self._attr_state = MediaPlayerState.PAUSED
         self.async_write_ha_state()
 
     async def async_media_stop(self) -> None:
+        self._clear_pending()
         await self.coordinator.async_command(lambda lan: lan.stop_music())
         self._attr_state = MediaPlayerState.IDLE
         self._attr_media_title = None
         self.async_write_ha_state()
 
     async def async_media_next_track(self) -> None:
+        self._clear_pending()
         await self.coordinator.async_command(lambda lan: lan.next_music(), settle=MUSIC_PLAY_SETTLE_S)
+        # the device advances to a track we cannot name; don't keep showing the old one
         self._attr_state = MediaPlayerState.PLAYING
+        self._attr_media_title = None
+        self._last_track = None
         self.async_write_ha_state()
 
     async def async_media_previous_track(self) -> None:
+        self._clear_pending()
         await self.coordinator.async_command(lambda lan: lan.prev_music(), settle=MUSIC_PLAY_SETTLE_S)
         self._attr_state = MediaPlayerState.PLAYING
+        self._attr_media_title = None
+        self._last_track = None
         self.async_write_ha_state()
 
     async def async_media_play(self) -> None:
@@ -114,20 +138,47 @@ class IbabyMediaPlayer(IbabyEntity, MediaPlayerEntity):
         if not media_id.startswith("track/"):
             raise HomeAssistantError(f"Unsupported media id: {media_id}")
         _, category, track_id = media_id.split("/", 2)
+        if category not in CATEGORIES:
+            raise HomeAssistantError(f"Unknown category: {category}")
         tracks = await self.coordinator.async_music_list(category)
-        track = next((t for t in tracks if str(t["id"]) == track_id), None)
+        track = next((t for t in tracks if str(t.get("id")) == track_id), None)
         if track is None:
             raise HomeAssistantError(f"Track {track_id} not found in {category}")
         await self._play_track(track)
 
     async def _play_track(self, track: dict) -> None:
-        await self.coordinator.async_command(
-            lambda lan: lan.play_music(track, mode=P.VMODE_SINGLE), settle=MUSIC_PLAY_SETTLE_S
-        )
-        self._last_track = track
+        # Optimistic UI: reflect the pick right away; the drain confirms or reverts it.
+        # _last_track is NOT committed here -- only after a confirmed send -- so a
+        # failed play can't leave a permanent fake "playing" or replay a silent track.
         self._attr_state = MediaPlayerState.PLAYING
         self._attr_media_title = track.get("name")
         self.async_write_ha_state()
+        # Single-deep queue: whatever is loading runs to completion, and only the
+        # LATEST further request waits behind it. Rapid switching collapses to
+        # "now loading + last requested" instead of grinding through every tap.
+        self._pending_track = track
+        if self._drain_task is None or self._drain_task.done():
+            # Entry-scoped so HA cancels it on unload/reload (no orphaned session).
+            self._drain_task = self.coordinator.config_entry.async_create_background_task(
+                self.hass, self._drain(), name=f"ibaby-music-drain-{self.coordinator.camera.camid}"
+            )
+
+    async def _drain(self) -> None:
+        while self._pending_track is not None:
+            track = self._pending_track
+            self._pending_track = None
+            try:
+                await self.coordinator.async_command(
+                    lambda lan, t=track: lan.play_music(t, mode=P.VMODE_SINGLE),
+                    settle=MUSIC_PLAY_SETTLE_S,
+                )
+            except Exception:  # noqa: BLE001 - a failed send must not stall the queue or lie about state
+                _LOGGER.exception("ibaby music play failed for %s", track.get("name"))
+                self._attr_state = MediaPlayerState.IDLE
+                self._attr_media_title = None
+                self.async_write_ha_state()
+            else:
+                self._last_track = track  # commit only after a confirmed send
 
     # --- browsing ------------------------------------------------------- #
     async def async_browse_media(
