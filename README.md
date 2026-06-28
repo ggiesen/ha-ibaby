@@ -58,12 +58,28 @@ run a Python producer directly. Instead the integration starts a small
 ingests it and fans it out to WebRTC / HLS consumers. The control and sensor path
 uses a second, lightweight P2P session, so video and control run side by side.
 
-## Two-way audio caveats
+## Two-way audio (talk-back)
 
-Talk-back rides go2rtc's WebRTC audio backchannel (PCMU, which the camera speaks
-natively). It requires Home Assistant to be served over **HTTPS** (browsers block
-microphone access otherwise) and a camera card that exposes a microphone button.
-Treat it as experimental and expect to test it in a desktop browser first.
+Talk-back rides go2rtc's WebRTC audio backchannel. The camera speaks G.711 A-law
+(PCMA) natively, and the `pyibaby.rtspd` bridge advertises an ONVIF backchannel
+on its local RTSP stream, so go2rtc negotiates the return audio path
+automatically - nothing to configure on the integration side.
+
+Two things are outside the integration's control and you have to set them up:
+
+- **HTTPS.** Browsers only grant microphone access on a secure origin, so Home
+  Assistant must be reached over `https://` (your own TLS, or Nabu Casa Cloud).
+- **A card with a microphone.** Home Assistant's built-in camera/WebRTC card does
+  not capture the microphone yet (native two-way audio is still unmerged upstream
+  as of mid-2026). Use a WebRTC card that does, such as the
+  [Advanced Camera Card](https://card.camera/) or
+  [AlexxIT/WebRTC](https://github.com/AlexxIT/WebRTC), set to include the
+  microphone (for example `media: video,audio,microphone`). Press its
+  talk/microphone button and speak; it plays out of the camera.
+
+Treat it as experimental and test in a desktop browser first. When native
+two-way audio lands in Home Assistant it should work through the standard card
+with no change here.
 
 ## Branching
 
